@@ -1,160 +1,182 @@
 @echo off
 setlocal enabledelayedexpansion
+
+:: ========================================================
+:: Network Scanner & Scope Splitter
+:: Version: 1.0
+:: ========================================================
+
+:: Configuration
+set "INPUT_FILE=scope.txt"
+set "OUTPUT_DIR=output"
+set "IPS_PER_FILE=20"
+set "SUBNETS_PER_FILE=3"
+
+:: Clear screen and show banner
 cls
+echo ========================================================
+echo             Network Scanner & Scope Splitter
+echo                     Version 1.0
+echo ========================================================
+echo.
 
-:: =============================================================================
-:: Script: Advanced Scope Splitter and Nmap Scanner
-:: Author: Improved version
-:: Created: February 2024
-:: =============================================================================
-
-:: Configuration Variables
-set "CONFIG_IPS_PER_FILE=20"
-set "CONFIG_SUBNETS_PER_FILE=3"
-set "CONFIG_INPUT_FILE=scope.txt"
-set "CONFIG_OUTPUT_DIR=output"
-set "CONFIG_TEMP_DIR=temp"
-set "CONFIG_LOG_FILE=scan_log.txt"
-
-:: Color codes for Windows console
-set "RED=[91m"
-set "GREEN=[92m"
-set "YELLOW=[93m"
-set "BLUE=[94m"
-set "MAGENTA=[95m"
-set "CYAN=[96m"
-set "RESET=[0m"
-
-:: =============================================================================
-::                           Function Definitions
-:: =============================================================================
-:printBanner
-    echo %CYAN%===============================================================================%RESET%
-    echo %CYAN%                     Advanced Scope Splitter and Nmap Scanner%RESET%
-    echo %CYAN%                              Version 2.0%RESET%
-    echo %CYAN%===============================================================================%RESET%
+:: Check if input file exists
+if not exist "%INPUT_FILE%" (
+    echo [ERROR] scope.txt not found!
     echo.
-    goto :eof
-
-:logMessage
-    echo %~1 >> "%CONFIG_OUTPUT_DIR%\%CONFIG_LOG_FILE%"
-    echo %~1
-    goto :eof
-
-:checkPrerequisites
-    call :logMessage "[*] Checking prerequisites..."
-    
-    if not exist "%CONFIG_INPUT_FILE%" (
-        call :logMessage "%RED%[!] Error: %CONFIG_INPUT_FILE% not found!%RESET%"
-        call :logMessage "[i] Please create %CONFIG_INPUT_FILE% with your target scope."
-        call :showInputFormat
-        exit /b 1
-    )
-    
-    :: Create necessary directories
-    if not exist "%CONFIG_OUTPUT_DIR%" mkdir "%CONFIG_OUTPUT_DIR%"
-    if not exist "%CONFIG_TEMP_DIR%" mkdir "%CONFIG_TEMP_DIR%"
-    
-    goto :eof
-
-:showInputFormat
+    echo Create scope.txt with your targets:
+    echo Example format:
     echo.
-    echo Example Input Format for scope.txt:
-    echo   IP Addresses:        Subnets:
-    echo   192.168.1.1         192.168.0.0/24
-    echo   10.0.0.1            10.0.0.0/16
-    echo   172.16.1.1          172.16.0.0/12
+    echo Individual IPs:         Subnets:
+    echo 192.168.1.1            192.168.0.0/24
+    echo 10.0.0.1               10.0.0.0/16
+    echo 172.16.1.1             172.16.0.0/12
     echo.
-    goto :eof
+    echo Note: One entry per line, no separators needed
+    echo.
+    pause
+    exit /b 1
+)
 
-:processScopeFile
-    call :logMessage "[*] Processing scope file..."
-    
-    :: Clear previous temp files if they exist
-    del /f /q "%CONFIG_TEMP_DIR%\*.txt" 2>nul
-    
-    :: Use PowerShell for better text processing
-    powershell -Command "Get-Content '%CONFIG_INPUT_FILE%' | ForEach-Object { if ($_ -match '/') { Add-Content '%CONFIG_TEMP_DIR%\temp_subnets.txt' $_ } else { Add-Content '%CONFIG_TEMP_DIR%\temp_ips.txt' $_ } }"
-    
-    :: Remove duplicates using PowerShell
-    powershell -Command "Get-Content '%CONFIG_TEMP_DIR%\temp_ips.txt' | Sort-Object -Unique | Set-Content '%CONFIG_TEMP_DIR%\unique_ips.txt'"
-    powershell -Command "Get-Content '%CONFIG_TEMP_DIR%\temp_subnets.txt' | Sort-Object -Unique | Set-Content '%CONFIG_TEMP_DIR%\unique_subnets.txt'"
-    
-    :: Count entries
-    for /f %%a in ('type "%CONFIG_TEMP_DIR%\unique_ips.txt" ^| find /c /v ""') do set "unique_ips=%%a"
-    for /f %%a in ('type "%CONFIG_TEMP_DIR%\unique_subnets.txt" ^| find /c /v ""') do set "unique_subnets=%%a"
-    
-    call :logMessage "[+] Found %GREEN%%unique_ips%%RESET% unique IP addresses"
-    call :logMessage "[+] Found %GREEN%%unique_subnets%%RESET% unique subnets"
-    
-    goto :eof
+:: Create output directory
+if not exist "%OUTPUT_DIR%" (
+    mkdir "%OUTPUT_DIR%"
+    echo [INFO] Created output directory
+)
 
-:splitFiles
-    call :logMessage "[*] Splitting files based on configuration..."
-    
-    :: Split IPs
-    powershell -Command "$i=1; $count=0; Get-Content '%CONFIG_TEMP_DIR%\unique_ips.txt' | ForEach-Object { if ($count -eq %CONFIG_IPS_PER_FILE%) { $i++; $count=0 }; Add-Content '%CONFIG_OUTPUT_DIR%\scope$i.txt' $_; $count++ }"
-    
-    :: Split Subnets
-    powershell -Command "$i=1; $count=0; Get-Content '%CONFIG_TEMP_DIR%\unique_subnets.txt' | ForEach-Object { if ($count -eq %CONFIG_SUBNETS_PER_FILE%) { $i++; $count=0 }; Add-Content '%CONFIG_OUTPUT_DIR%\subnet$i.txt' $_; $count++ }"
-    
-    goto :eof
+:: Clean previous output files
+del /f /q "%OUTPUT_DIR%\*.txt" 2>nul
+echo [INFO] Cleaned previous output files
 
-:configureNmap
-    call :logMessage "[*] Configuring Nmap..."
-    
-    :: Check common Nmap locations
-    set "nmap_locations=C:\Program Files\Nmap\nmap.exe C:\Program Files (x86)\Nmap\nmap.exe"
-    
-    for %%n in (%nmap_locations%) do (
-        if exist "%%n" (
-            set "nmap_path=%%n"
-            call :logMessage "[+] Found Nmap at: %GREEN%%%n%RESET%"
-            goto :nmapFound
+:: Process input file
+echo [INFO] Processing scope.txt...
+
+:: Create temporary files for sorting
+type nul > "%OUTPUT_DIR%\ips.tmp"
+type nul > "%OUTPUT_DIR%\subnets.tmp"
+
+:: Sort IPs and subnets
+for /f "tokens=* usebackq" %%a in ("%INPUT_FILE%") do (
+    set "line=%%a"
+    if "!line!" neq "" (
+        echo %%a | findstr /r "^.*/..*$" >nul
+        if errorlevel 1 (
+            echo %%a >> "%OUTPUT_DIR%\ips.tmp"
+        ) else (
+            echo %%a >> "%OUTPUT_DIR%\subnets.tmp"
         )
     )
-    
-    :nmapPrompt
-    call :logMessage "%YELLOW%[!] Nmap not found in common locations%RESET%"
-    set /p "custom_path=Enter path to nmap.exe: "
-    
-    if exist "!custom_path!" (
-        set "nmap_path=!custom_path!"
-        goto :nmapFound
-    ) else (
-        call :logMessage "%RED%[!] Invalid path%RESET%"
-        goto :nmapPrompt
-    )
-    
-    :nmapFound
-    goto :eof
+)
 
-:runScans
-    call :logMessage "[*] Initiating Nmap scans..."
+:: Count entries
+set /a ip_count=0
+set /a subnet_count=0
+for /f %%a in ('type "%OUTPUT_DIR%\ips.tmp" ^| find /c /v ""') do set /a ip_count=%%a
+for /f %%a in ('type "%OUTPUT_DIR%\subnets.tmp" ^| find /c /v ""') do set /a subnet_count=%%a
+
+echo [INFO] Found %ip_count% IP addresses and %subnet_count% subnets
+
+:: Split IPs into files
+if %ip_count% gtr 0 (
+    echo [INFO] Creating IP files...
+    set /a current_count=0
+    set /a file_number=1
+    type nul > "%OUTPUT_DIR%\scope%file_number%.txt"
     
-    for %%f in ("%CONFIG_OUTPUT_DIR%\scope*.txt" "%CONFIG_OUTPUT_DIR%\subnet*.txt") do (
-        if exist "%%f" (
-            call :logMessage "[+] Starting scan for: %%~nxf"
-            start cmd /c ""%nmap_path%" -sS -Pn -p- -T4 -iL "%%f" -oA "%CONFIG_OUTPUT_DIR%\scan_%%~nf" --max-rtt-timeout 100ms --max-retries 3 --defeat-rst-ratelimit --min-rate 450 --max-rate 15000 && echo Scan completed for %%~nxf > "%CONFIG_OUTPUT_DIR%\%%~nf_completed.txt""
-            timeout /t 2 /nobreak >nul
+    for /f "tokens=*" %%a in (%OUTPUT_DIR%\ips.tmp) do (
+        echo %%a >> "%OUTPUT_DIR%\scope!file_number!.txt"
+        set /a current_count+=1
+        
+        if !current_count! equ %IPS_PER_FILE% (
+            echo [INFO] Created scope!file_number!.txt
+            set /a file_number+=1
+            set /a current_count=0
+            type nul > "%OUTPUT_DIR%\scope!file_number!.txt"
         )
     )
-    
-    goto :eof
+)
 
-:: =============================================================================
-::                           Main Execution
-:: =============================================================================
-:main
-    call :printBanner
-    call :checkPrerequisites || exit /b 1
-    call :processScopeFile
-    call :splitFiles
-    call :configureNmap
-    call :runScans
+:: Split subnets into files
+if %subnet_count% gtr 0 (
+    echo [INFO] Creating subnet files...
+    set /a current_count=0
+    set /a file_number=1
+    type nul > "%OUTPUT_DIR%\subnet%file_number%.txt"
     
-    call :logMessage "%GREEN%[+] All operations completed successfully%RESET%"
-    call :logMessage "[i] Check the output directory for results"
-    
-    timeout /t 5
-exit /b 0
+    for /f "tokens=*" %%a in (%OUTPUT_DIR%\subnets.tmp) do (
+        echo %%a >> "%OUTPUT_DIR%\subnet!file_number!.txt"
+        set /a current_count+=1
+        
+        if !current_count! equ %SUBNETS_PER_FILE% (
+            echo [INFO] Created subnet!file_number!.txt
+            set /a file_number+=1
+            set /a current_count=0
+            type nul > "%OUTPUT_DIR%\subnet!file_number!.txt"
+        )
+    )
+)
+
+:: Clean up empty files
+for %%f in ("%OUTPUT_DIR%\*.txt") do (
+    for /f %%A in ('type "%%f" ^| find "" /v /c') do (
+        if %%A equ 0 del "%%f"
+    )
+)
+
+:: Remove temporary files
+del /f /q "%OUTPUT_DIR%\*.tmp" 2>nul
+
+:: Find Nmap installation
+echo [INFO] Looking for Nmap installation...
+set "NMAP_PATH="
+
+:: Check common Nmap locations
+if exist "C:\Program Files\Nmap\nmap.exe" (
+    set "NMAP_PATH=C:\Program Files\Nmap\nmap.exe"
+) else if exist "C:\Program Files (x86)\Nmap\nmap.exe" (
+    set "NMAP_PATH=C:\Program Files (x86)\Nmap\nmap.exe"
+)
+
+:: If Nmap not found in common locations, ask user
+if not defined NMAP_PATH (
+    echo [WARN] Nmap not found in common locations
+    echo Please enter the full path to nmap.exe
+    echo Example: C:\Program Files\Nmap\nmap.exe
+    echo.
+    set /p "NMAP_PATH=Path to nmap.exe: "
+)
+
+:: Verify Nmap exists and is executable
+if not exist "%NMAP_PATH%" (
+    echo [ERROR] Could not find nmap.exe at specified location
+    pause
+    exit /b 1
+)
+
+:: Start Nmap scans
+echo [INFO] Starting Nmap scans...
+echo.
+
+for %%f in ("%OUTPUT_DIR%\scope*.txt" "%OUTPUT_DIR%\subnet*.txt") do (
+    if exist "%%f" (
+        echo [INFO] Starting scan for %%~nxf
+        start cmd /k "echo Starting scan for %%~nxf && "%NMAP_PATH%" -sS -Pn -p- -T4 -iL "%%f" -oA "%OUTPUT_DIR%\scan_%%~nf" --max-rtt-timeout 100ms --max-retries 3 --min-rate 450 --max-rate 15000 && echo Scan completed for %%~nxf"
+        timeout /t 2 >nul
+    )
+)
+
+:: Final status
+echo.
+echo ========================================================
+echo                    Scan Status
+echo ========================================================
+echo All scans have been initiated
+echo.
+echo Scan files will be saved as:
+echo - Normal output: %OUTPUT_DIR%\scan_*.nmap
+echo - XML output:    %OUTPUT_DIR%\scan_*.xml
+echo - Greppable:    %OUTPUT_DIR%\scan_*.gnmap
+echo.
+echo [INFO] Script completed successfully
+echo.
+pause
