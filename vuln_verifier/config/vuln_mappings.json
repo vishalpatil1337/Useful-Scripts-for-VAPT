@@ -1,0 +1,116 @@
+{
+    "categories": {
+        "Apache": {
+            "keywords": ["apache"],
+            "vulnerabilities": {
+                "Apache Default Page Exposure": ["11219"],
+                "Apache ModSecurity Bypass": ["73346"]
+            }
+        },
+        "DB": {
+            "keywords": ["mysql", "postgresql", "database"],
+            "vulnerabilities": {
+                "MySQL Default Credentials": ["10435"],
+                "PostgreSQL Weak Password": ["57890"]
+            }
+        },
+        "DNS": {
+            "keywords": ["dns"],
+            "vulnerabilities": {
+                "DNS Zone Transfer": ["10923"],
+                "DNS Cache Poisoning": ["65432"]
+            }
+        },
+        "FTP": {
+            "keywords": ["ftp"],
+            "vulnerabilities": {
+                "Anonymous FTP Login": ["10081"],
+                "FTP Weak Password": ["23456"]
+            }
+        },
+        "IKE": {
+            "keywords": ["ipsec", "ike", "vpn"],
+            "vulnerabilities": {
+                "IKE Aggressive Mode": ["42897"],
+                "IKE Weak Encryption": ["56789"]
+            }
+        },
+        "Nginx": {
+            "keywords": ["nginx"],
+            "vulnerabilities": {
+                "Nginx Default Page Exposure": ["11220"],
+                "Nginx Security Misconfiguration": ["78901"]
+            }
+        },
+        "RDP": {
+            "keywords": ["rdp"],
+            "vulnerabilities": {
+                "RDP Weak Encryption": ["34567"],
+                "RDP Default Credentials": ["45678"]
+            }
+        },
+        "SMB": {
+            "keywords": ["smb"],
+            "vulnerabilities": {
+                "SMBv1 Enabled": ["56789"],
+                "SMB EternalBlue": ["10376"]
+            }
+        },
+        "SMTP": {
+            "keywords": ["smtp"],
+            "vulnerabilities": {
+                "SMTP Open Relay": ["12345"],
+                "SMTP Weak Authentication": ["23456"]
+            }
+        },
+        "SMTP2": {
+            "keywords": ["smtp"],
+            "vulnerabilities": {
+                "SMTP Banner Grab": ["34567"],
+                "SMTP STARTTLS Bypass": ["45678"]
+            }
+        },
+        "SSH": {
+            "keywords": ["ssh"],
+            "vulnerabilities": {
+                "Weak SSH Algorithms": ["90317"],
+                "SSH Default Password": ["56789"]
+            }
+        },
+        "SSL": {
+            "keywords": ["ssl", "tls", "cipher", "protocol"],
+            "vulnerabilities": {
+                "SSL/TLS Weak Ciphers": ["26928", "42873"],
+                "SSLv3 Enabled": ["15901"],
+                "TLS 1.0 Enabled": ["88881"],
+                "Self-Signed Certificate": ["57582"]
+            }
+        },
+        "Telnet": {
+            "keywords": ["telnet"],
+            "vulnerabilities": {
+                "Telnet Default Password": ["67890"],
+                "Telnet Cleartext Authentication": ["78901"]
+            }
+        },
+        "Tomcat": {
+            "keywords": ["tomcat"],
+            "vulnerabilities": {
+                "Tomcat Default Page Exposure": ["11221"],
+                "Tomcat Manager Access": ["89012"]
+            }
+        },
+        "Web": {
+            "keywords": ["http", "web"],
+            "vulnerabilities": {
+                "Directory Traversal": ["65027"],
+                "XSS Vulnerability": ["73342"],
+                "SQL Injection": ["73345"],
+                "HTTP Method Allowed": ["11219"]
+            }
+        },
+        "General": {
+            "keywords": []
+        }
+    }
+}

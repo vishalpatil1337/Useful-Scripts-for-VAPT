@@ -1,0 +1,28 @@
+{
+    "tools": {
+        "nmap": {
+            "url": "https://nmap.org/dist/nmap-7.94-setup.exe",
+            "install_cmd": "nmap-7.94-setup.exe /S",
+            "check_cmd": "nmap --version"
+        },
+        "sslscan": {
+            "url": "https://github.com/rbsec/sslscan/releases/download/2.1.6/sslscan-2.1.6.zip",
+            "extract_to": "tools",
+            "check_cmd": "sslscan.exe -h"
+        },
+        "sslyze": {
+            "pip_install": "sslyze==5.1.0",
+            "check_cmd": "python -m sslyze --help"
+        },
+        "ike-scan": {
+            "url": "https://github.com/royhills/ike-scan/releases/download/1.9/ike-scan-win32-1.9.zip",
+            "extract_to": "tools",
+            "check_cmd": "ike-scan.exe -h"
+        },
+        "curl": {
+            "url": "https://curl.se/windows/dl-8.4.0_7/curl-8.4.0_7-win64-mingw.zip",
+            "extract_to": "tools/curl-8.4.0_7-win64-mingw/bin",
+            "check_cmd": "curl.exe --version"
+        }
+    }
+}
