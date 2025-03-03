@@ -269,69 +269,98 @@ For Each secName In dictSections.Keys
         objSheet.Range(objSheet.Cells(3, 1), objSheet.Cells(maxRows + 3, 4)).Borders.LineStyle = 1
         objSheet.Range(objSheet.Cells(3, 1), objSheet.Cells(maxRows + 3, 4)).BorderAround 1, 2
         
-        ' Create a new worksheet for formatted copy-paste with bullet points
+        ' Create improved copy-paste sheet for Word
         Dim copySheet
         Set copySheet = objWB.Sheets.Add
         copySheet.Name = sheetName & "_CopyPaste"
         
         ' Add a header to the copy-paste sheet
-        copySheet.Range("A1:D1").Merge
-        copySheet.Cells(1, 1).Value = "Formatted IPs for Copy-Paste (with Bullet Points)"
+        copySheet.Range("A1").Value = "Network Segments:"
         copySheet.Cells(1, 1).Font.Bold = True
-        copySheet.Cells(1, 1).HorizontalAlignment = -4108 ' Center
+        copySheet.Cells(1, 1).Font.Name = "Calibri"
+        copySheet.Cells(1, 1).Font.Size = 10
         
-        ' Create Word-friendly bullet points using character code 8226 (•)
-        Dim bulletChar
-        bulletChar = ChrW(8226)
-        
-        ' Reset counters and copy IPs with proper bullet formatting
+        ' Reset counters
         currentIndex = 0
         
-        ' Fill column 1 with bullet IPs
-        For i = 0 To rowsCol1 - 1
-            If currentIndex < totalIPs Then
-                copySheet.Cells(i + 3, 1).Value = bulletChar & " " & sectionIPs(currentIndex)
+        ' Set font for all cells
+        copySheet.Cells.Font.Name = "Calibri"
+        copySheet.Cells.Font.Size = 10
+        
+        ' Create a table with 4 columns that will maintain formatting when copied to Word
+        ' We'll use a 4-column table with proper indentation and bullet points
+        
+        ' Calculate rows needed per column (using same distribution as main sheet)
+        Dim rowOffset
+        rowOffset = 3 ' Starting row (after header)
+        
+        ' Create bullet points that will work in Word
+        ' Using Format function with Unicode bullet character
+        Dim bulletPoint
+        bulletPoint = ChrW(8226) & " " ' Bullet point + space
+        
+        ' Calculate the maximum number of rows needed
+        Dim maxRowsNeeded
+        maxRowsNeeded = 0
+        If rowsCol1 > maxRowsNeeded Then maxRowsNeeded = rowsCol1
+        If rowsCol2 > maxRowsNeeded Then maxRowsNeeded = rowsCol2
+        If rowsCol3 > maxRowsNeeded Then maxRowsNeeded = rowsCol3
+        If rowsCol4 > maxRowsNeeded Then maxRowsNeeded = rowsCol4
+        
+        ' Create the table layout - properly formatted for Word copy/paste
+        For i = 0 To maxRowsNeeded - 1
+            ' Column A
+            If i < rowsCol1 And currentIndex < totalIPs Then
+                copySheet.Cells(i + rowOffset, 1).Value = bulletPoint & sectionIPs(currentIndex)
+                currentIndex = currentIndex + 1
+            End If
+            
+            ' Column B
+            If i < rowsCol2 And currentIndex < totalIPs Then
+                copySheet.Cells(i + rowOffset, 2).Value = bulletPoint & sectionIPs(currentIndex)
+                currentIndex = currentIndex + 1
+            End If
+            
+            ' Column C
+            If i < rowsCol3 And currentIndex < totalIPs Then
+                copySheet.Cells(i + rowOffset, 3).Value = bulletPoint & sectionIPs(currentIndex)
+                currentIndex = currentIndex + 1
+            End If
+            
+            ' Column D
+            If i < rowsCol4 And currentIndex < totalIPs Then
+                copySheet.Cells(i + rowOffset, 4).Value = bulletPoint & sectionIPs(currentIndex)
                 currentIndex = currentIndex + 1
             End If
         Next
         
-        ' Fill column 2 with bullet IPs
-        For i = 0 To rowsCol2 - 1
-            If currentIndex < totalIPs Then
-                copySheet.Cells(i + 3, 2).Value = bulletChar & " " & sectionIPs(currentIndex)
-                currentIndex = currentIndex + 1
-            End If
-        Next
-        
-        ' Fill column 3 with bullet IPs
-        For i = 0 To rowsCol3 - 1
-            If currentIndex < totalIPs Then
-                copySheet.Cells(i + 3, 3).Value = bulletChar & " " & sectionIPs(currentIndex)
-                currentIndex = currentIndex + 1
-            End If
-        Next
-        
-        ' Fill column 4 with bullet IPs
-        For i = 0 To rowsCol4 - 1
-            If currentIndex < totalIPs Then
-                copySheet.Cells(i + 3, 4).Value = bulletChar & " " & sectionIPs(currentIndex)
-                currentIndex = currentIndex + 1
-            End If
-        Next
-        
-        ' Format the copySheet
-        copySheet.Columns("A:D").AutoFit
+        ' Format the copy-paste columns
         For i = 1 To 4
-            If copySheet.Columns(i).ColumnWidth < 20 Then
-                copySheet.Columns(i).ColumnWidth = 20
-            End If
+            ' Set a consistent column width
+            copySheet.Columns(i).ColumnWidth = 20
+            
+            ' Add a minimal left indent to maintain spacing in Word
+            copySheet.Columns(i).IndentLevel = 0
         Next
         
-        ' Add instructional note
-        copySheet.Range("A2:D2").Merge
-        copySheet.Cells(2, 1).Value = "Select and copy the cells below to paste into Word with bullet formatting intact"
-        copySheet.Cells(2, 1).Font.Italic = True
-        copySheet.Cells(2, 1).HorizontalAlignment = -4108 ' Center
+        ' Create a named range that can be easily copied
+        ' Use a valid name for the range (avoid special characters)
+        Dim rangeName
+        rangeName = "CopyRange_" & Replace(Replace(sheetName, " ", "_"), "-", "_")
+        
+        ' Ensure the name starts with a letter and contains only permitted characters
+        If Not IsEmpty(rangeName) Then
+            objExcel.ActiveWorkbook.Names.Add rangeName, copySheet.Range(copySheet.Cells(1, 1), copySheet.Cells(maxRowsNeeded + rowOffset - 1, 4))
+        End If
+        
+        ' Add a comment with copy instructions
+        copySheet.Cells(maxRowsNeeded + rowOffset + 2, 1).Value = "How to copy to Word:"
+        copySheet.Cells(maxRowsNeeded + rowOffset + 3, 1).Value = "1. Select all cells with content (A1:D" & (maxRowsNeeded + rowOffset - 1) & ")"
+        copySheet.Cells(maxRowsNeeded + rowOffset + 4, 1).Value = "2. Copy (Ctrl+C)"
+        copySheet.Cells(maxRowsNeeded + rowOffset + 5, 1).Value = "3. In Word, use Paste Special > Keep Source Formatting"
+        
+        ' Format headings in the copy instructions
+        copySheet.Cells(maxRowsNeeded + rowOffset + 2, 1).Font.Bold = True
     End If
 Next
 
@@ -342,4 +371,4 @@ End If
 
 ' Save workbook
 objWB.SaveAs objFSO.GetAbsolutePathName("IP_Inventory.xlsx")
-WScript.Echo "Excel file created with professional formatting and statistics."
+WScript.Echo "Excel file created with professional formatting and statistics and improved copy-paste functionality."
