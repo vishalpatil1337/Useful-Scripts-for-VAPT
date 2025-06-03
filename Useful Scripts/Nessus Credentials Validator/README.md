@@ -397,21 +397,6 @@ This project is licensed under the MIT License.
 See LICENSE file for details.
 ```
 
-## Support
-
-### Issues and Bugs
-
-- Create an issue in the repository
-- Provide detailed error messages
-- Include configuration files (sanitized)
-- Specify Python version and OS
-
-### Feature Requests
-
-- Submit feature requests via GitHub issues
-- Describe use case and benefits
-- Provide implementation suggestions
-
 ## Changelog
 
 ### Version 4.0
