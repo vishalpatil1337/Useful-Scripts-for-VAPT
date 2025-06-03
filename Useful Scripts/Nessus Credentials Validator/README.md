@@ -1,4 +1,4 @@
-# Nessus Credential Validator v4.0
+# Nessus Credential Validator
 
 ```
   _  _  ___  ___  __  __ ___ _   _ ___ 
@@ -396,26 +396,3 @@ black nessus_validator.py
 This project is licensed under the MIT License.
 See LICENSE file for details.
 ```
-
-## Changelog
-
-### Version 4.0
-- Added SSH key authentication support
-- Implemented individual credential management
-- Enhanced error handling and reporting
-- Improved console output with colors and tables
-- Added comprehensive CSV logging
-
-### Version 3.0
-- Added SMB credential validation
-- Implemented multi-protocol support
-- Enhanced scope management
-
-### Version 2.0
-- Added credential file parsing
-- Implemented CSV output
-- Enhanced error handling
-
-### Version 1.0
-- Initial SSH credential validation
-- Basic console output
