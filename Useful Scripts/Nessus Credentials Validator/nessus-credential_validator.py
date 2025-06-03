@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Nessus Credential Validator v3.0
-Description: Enhanced version with direct validation, better UI, and improved error handling
+Nessus Credential Validator v4.0
+Description: Enhanced version with key-based authentication and flexible credential management
 """
 
 from colorama import Fore, Style, init
@@ -24,7 +24,10 @@ init(autoreset=True)
 # Configuration
 SCOPE_FILE = "scope.txt"
 CREDENTIALS_FILE = "credentials.txt"
+LINUX_CREDS_FILE = "linux-credentials.txt"
+WINDOWS_CREDS_FILE = "windows-credentials.txt"
 RESULTS_FILE = "validation_results.csv"
+KEY_FOLDER = "key"
 TIMEOUT = 5  # Seconds
 
 def print_banner():
@@ -35,7 +38,38 @@ def print_banner():
  | .` | (_) \__ \  >  < | _|| |_| \__ \
  |_|\_|\___/|___/ /_/\_\|_|  \___/|___/
     """ + Style.RESET_ALL)
-    print(Fore.YELLOW + "Nessus Pre-Scan Credential Validator v3.0\n" + Style.RESET_ALL)
+    print(Fore.YELLOW + "Nessus Pre-Scan Credential Validator v4.0\n" + Style.RESET_ALL)
+
+def get_user_preferences():
+    """Get user preferences for validation method"""
+    print(Fore.GREEN + "[+] Configuration Options" + Style.RESET_ALL)
+    
+    # Authentication method choice
+    print("\nChoose authentication method:")
+    print("1. Username/Password credentials")
+    print("2. SSH Key authentication")
+    
+    while True:
+        auth_choice = input(Fore.YELLOW + "Enter choice (1 or 2): " + Style.RESET_ALL).strip()
+        if auth_choice in ['1', '2']:
+            break
+        print(Fore.RED + "Invalid choice. Please enter 1 or 2." + Style.RESET_ALL)
+    
+    # Credential management choice
+    print("\nChoose credential management:")
+    print("1. Single credential set per system type (from credentials.txt)")
+    print("2. Individual credentials per IP (from linux-credentials.txt/windows-credentials.txt)")
+    
+    while True:
+        cred_choice = input(Fore.YELLOW + "Enter choice (1 or 2): " + Style.RESET_ALL).strip()
+        if cred_choice in ['1', '2']:
+            break
+        print(Fore.RED + "Invalid choice. Please enter 1 or 2." + Style.RESET_ALL)
+    
+    return {
+        'auth_method': 'key' if auth_choice == '2' else 'password',
+        'cred_management': 'individual' if cred_choice == '2' else 'single'
+    }
 
 def parse_scope():
     """Parse scope.txt file into structured format"""
@@ -110,8 +144,54 @@ def parse_credentials():
     
     return creds
 
-def validate_ssh(host, username, password):
-    """Validate SSH credentials with improved error handling"""
+def parse_individual_credentials(system_type):
+    """Parse individual credential files for specific system types"""
+    filename = f"{system_type}-credentials.txt"
+    ip_creds = {}
+    
+    try:
+        with open(filename, 'r') as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith('#'):
+                    continue
+                
+                # Format: ip:"username":"password"
+                parts = line.split(':', 1)
+                if len(parts) == 2:
+                    ip = parts[0].strip()
+                    cred_part = parts[1].strip()
+                    
+                    # Parse credentials - expecting "username":"password"
+                    cred_parts = cred_part.split('":"')
+                    if len(cred_parts) == 2:
+                        username = cred_parts[0].strip('"')
+                        password = cred_parts[1].strip('"')
+                        ip_creds[ip] = {'username': username, 'password': password}
+    except FileNotFoundError:
+        print(Fore.YELLOW + f"Warning: {filename} not found, using default credentials" + Style.RESET_ALL)
+    
+    return ip_creds
+
+def get_ssh_keys():
+    """Get available SSH keys from the key folder"""
+    keys = {}
+    
+    if not os.path.exists(KEY_FOLDER):
+        print(Fore.RED + f"Error: Key folder '{KEY_FOLDER}' not found!" + Style.RESET_ALL)
+        return keys
+    
+    # Look for .pem and .ppk files
+    for filename in os.listdir(KEY_FOLDER):
+        if filename.endswith(('.pem', '.ppk')):
+            key_path = os.path.join(KEY_FOLDER, filename)
+            keys[filename] = key_path
+            print(Fore.CYAN + f"Found key: {filename}" + Style.RESET_ALL)
+    
+    return keys
+
+def validate_ssh_with_password(host, username, password):
+    """Validate SSH credentials with password"""
     try:
         print(f"  {Fore.BLUE}[*]{Style.RESET_ALL} Testing SSH connection to {host}...")
         client = paramiko.SSHClient()
@@ -134,6 +214,56 @@ def validate_ssh(host, username, password):
             
     except paramiko.AuthenticationException:
         return False, "Authentication failed (wrong credentials)"
+    except paramiko.SSHException as e:
+        return False, f"SSH error: {str(e)}"
+    except socket.timeout:
+        return False, "Connection timed out"
+    except socket.error as e:
+        return False, f"Network error: {str(e)}"
+    except Exception as e:
+        return False, f"Error: {str(e)}"
+
+def validate_ssh_with_key(host, username, key_path):
+    """Validate SSH credentials with private key"""
+    try:
+        print(f"  {Fore.BLUE}[*]{Style.RESET_ALL} Testing SSH key connection to {host}...")
+        client = paramiko.SSHClient()
+        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        
+        # Load private key
+        try:
+            if key_path.endswith('.pem'):
+                private_key = paramiko.RSAKey.from_private_key_file(key_path)
+            elif key_path.endswith('.ppk'):
+                # For .ppk files, we need to handle differently
+                # Note: paramiko doesn't directly support .ppk files
+                # You might need to convert .ppk to .pem first
+                print(f"  {Fore.YELLOW}[!]{Style.RESET_ALL} .ppk files need to be converted to .pem format")
+                return False, "PPK format not directly supported, please convert to PEM"
+            else:
+                return False, "Unsupported key format"
+                
+        except Exception as e:
+            return False, f"Key loading error: {str(e)}"
+        
+        client.connect(host, 
+                     username=username, 
+                     pkey=private_key,
+                     timeout=TIMEOUT,
+                     banner_timeout=TIMEOUT)
+        
+        # Try executing a simple command to verify access
+        stdin, stdout, stderr = client.exec_command('echo "Connection successful"')
+        result = stdout.read().decode().strip()
+        client.close()
+        
+        if result == "Connection successful":
+            return True, "Success"
+        else:
+            return False, "Command execution failed"
+            
+    except paramiko.AuthenticationException:
+        return False, "Authentication failed (wrong key or username)"
     except paramiko.SSHException as e:
         return False, f"SSH error: {str(e)}"
     except socket.timeout:
@@ -188,8 +318,52 @@ def log_result(system_type, ip, protocol, status, details):
         writer = csv.writer(csvfile)
         writer.writerow([system_type, ip, protocol, status, details])
 
+def validate_system(system_type, ip, credentials, preferences, ssh_keys=None):
+    """Validate a single system based on preferences"""
+    if system_type == "windows":
+        # Windows systems use SMB
+        if 'username' in credentials and 'password' in credentials:
+            username = credentials['username']
+            password = credentials['password']
+            domain = credentials.get('domain', '')
+            return validate_smb(ip, username, password, domain)
+        else:
+            return False, "Missing credentials"
+    
+    else:
+        # Linux and Others use SSH
+        if preferences['auth_method'] == 'key':
+            if ssh_keys and 'username' in credentials:
+                username = credentials['username']
+                # Use the first available key for now
+                # In a more advanced version, you could allow key selection per IP
+                key_name = list(ssh_keys.keys())[0]
+                key_path = ssh_keys[key_name]
+                print(f"  {Fore.BLUE}[*]{Style.RESET_ALL} Using SSH key: {key_name}")
+                return validate_ssh_with_key(ip, username, key_path)
+            else:
+                return False, "Missing SSH keys or username"
+        else:
+            if 'username' in credentials and 'password' in credentials:
+                username = credentials['username']
+                password = credentials['password']
+                return validate_ssh_with_password(ip, username, password)
+            else:
+                return False, "Missing credentials"
+
 def main():
     print_banner()
+    
+    # Get user preferences
+    preferences = get_user_preferences()
+    
+    # Get SSH keys if using key authentication
+    ssh_keys = {}
+    if preferences['auth_method'] == 'key':
+        ssh_keys = get_ssh_keys()
+        if not ssh_keys:
+            print(Fore.RED + "No SSH keys found! Please add keys to the 'key' folder." + Style.RESET_ALL)
+            exit(1)
     
     # Check if script has access to create files
     try:
@@ -204,7 +378,16 @@ def main():
     # Parse input files
     print(Fore.GREEN + "\n[+] Parsing configuration files" + Style.RESET_ALL)
     scopes = parse_scope()
-    credentials = parse_credentials()
+    
+    # Load credentials based on management preference
+    if preferences['cred_management'] == 'single':
+        credentials = parse_credentials()
+        linux_ip_creds = {}
+        windows_ip_creds = {}
+    else:
+        credentials = {"linux": {}, "windows": {}, "others": {}}
+        linux_ip_creds = parse_individual_credentials('linux')
+        windows_ip_creds = parse_individual_credentials('windows')
     
     # Track validation statistics
     stats = {
@@ -220,87 +403,79 @@ def main():
     }
     
     # Linux validation
-    print(Fore.GREEN + "\n[+] Validating Linux Credentials via SSH" + Style.RESET_ALL)
+    print(Fore.GREEN + "\n[+] Validating Linux Credentials" + Style.RESET_ALL)
     print(Fore.CYAN + "╔═════════════════════════════════════════════════════════════╗")
     print(Fore.CYAN + "║                     LINUX VALIDATION                        ║")
     print(Fore.CYAN + "╚═════════════════════════════════════════════════════════════╝" + Style.RESET_ALL)
     
-    linux_creds = credentials['linux']
     for ip in scopes['linux']:
         stats["linux"]["total"] += 1
+        time.sleep(0.5)  # Brief pause between attempts to avoid aggressive scanning
         
-        if 'username' in linux_creds and 'password' in linux_creds:
-            username = linux_creds['username']
-            password = linux_creds['password']
-            
-            success, message = validate_ssh(ip, username, password)
-            
-            if success:
-                stats["linux"]["successful"] += 1
-                print(Fore.GREEN + f"  [✓] {ip}: SSH validation successful" + Style.RESET_ALL)
-                log_result("Linux", ip, "SSH", "Success", message)
-                results_table["linux"].append([ip, "SSH", "✓", message])
-            else:
-                stats["linux"]["failed"] += 1
-                print(Fore.RED + f"  [✗] {ip}: SSH validation failed - {message}" + Style.RESET_ALL)
-                log_result("Linux", ip, "SSH", "Failed", message)
-                results_table["linux"].append([ip, "SSH", "✗", message])
+        # Get credentials for this IP
+        if preferences['cred_management'] == 'individual' and ip in linux_ip_creds:
+            creds = linux_ip_creds[ip]
         else:
-            print(Fore.YELLOW + f"  [!] {ip}: Missing Linux credentials" + Style.RESET_ALL)
-            log_result("Linux", ip, "SSH", "Skipped", "Missing credentials")
-            results_table["linux"].append([ip, "SSH", "!", "Missing credentials"])
+            creds = credentials['linux']
+        
+        success, message = validate_system("linux", ip, creds, preferences, ssh_keys)
+        
+        if success:
+            stats["linux"]["successful"] += 1
+            print(Fore.GREEN + f"  [✓] {ip}: Validation successful" + Style.RESET_ALL)
+            log_result("Linux", ip, "SSH", "Success", message)
+            results_table["linux"].append([ip, "SSH", "✓", message])
+        else:
+            stats["linux"]["failed"] += 1
+            print(Fore.RED + f"  [✗] {ip}: Validation failed - {message}" + Style.RESET_ALL)
+            log_result("Linux", ip, "SSH", "Failed", message)
+            results_table["linux"].append([ip, "SSH", "✗", message])
     
     # Windows validation
-    print(Fore.GREEN + "\n[+] Validating Windows Credentials via SMB" + Style.RESET_ALL)
+    print(Fore.GREEN + "\n[+] Validating Windows Credentials" + Style.RESET_ALL)
     print(Fore.CYAN + "╔═════════════════════════════════════════════════════════════╗")
     print(Fore.CYAN + "║                     WINDOWS VALIDATION                      ║")
     print(Fore.CYAN + "╚═════════════════════════════════════════════════════════════╝" + Style.RESET_ALL)
     
-    windows_creds = credentials['windows']
     for ip in scopes['windows']:
         stats["windows"]["total"] += 1
+        time.sleep(0.5)  # Brief pause between attempts
         
-        if 'username' in windows_creds and 'password' in windows_creds:
-            username = windows_creds['username']
-            password = windows_creds['password']
-            domain = windows_creds.get('domain', '')
-            
-            success, message = validate_smb(ip, username, password, domain)
-            
-            if success:
-                stats["windows"]["successful"] += 1
-                print(Fore.GREEN + f"  [✓] {ip}: SMB validation successful" + Style.RESET_ALL)
-                log_result("Windows", ip, "SMB", "Success", message)
-                results_table["windows"].append([ip, "SMB", "✓", message])
-            else:
-                stats["windows"]["failed"] += 1
-                print(Fore.RED + f"  [✗] {ip}: SMB validation failed - {message}" + Style.RESET_ALL)
-                log_result("Windows", ip, "SMB", "Failed", message)
-                results_table["windows"].append([ip, "SMB", "✗", message])
+        # Get credentials for this IP
+        if preferences['cred_management'] == 'individual' and ip in windows_ip_creds:
+            creds = windows_ip_creds[ip]
         else:
-            print(Fore.YELLOW + f"  [!] {ip}: Missing Windows credentials" + Style.RESET_ALL)
-            log_result("Windows", ip, "SMB", "Skipped", "Missing credentials")
-            results_table["windows"].append([ip, "SMB", "!", "Missing credentials"])
+            creds = credentials['windows']
+        
+        success, message = validate_system("windows", ip, creds, preferences)
+        
+        if success:
+            stats["windows"]["successful"] += 1
+            print(Fore.GREEN + f"  [✓] {ip}: SMB validation successful" + Style.RESET_ALL)
+            log_result("Windows", ip, "SMB", "Success", message)
+            results_table["windows"].append([ip, "SMB", "✓", message])
+        else:
+            stats["windows"]["failed"] += 1
+            print(Fore.RED + f"  [✗] {ip}: SMB validation failed - {message}" + Style.RESET_ALL)
+            log_result("Windows", ip, "SMB", "Failed", message)
+            results_table["windows"].append([ip, "SMB", "✗", message])
 
-    # Others validation - try both protocols
+    # Others validation - use Linux and Windows credentials
     print(Fore.GREEN + "\n[+] Validating Other Systems" + Style.RESET_ALL)
     print(Fore.CYAN + "╔═════════════════════════════════════════════════════════════╗")
     print(Fore.CYAN + "║                     OTHERS VALIDATION                       ║")
     print(Fore.CYAN + "╚═════════════════════════════════════════════════════════════╝" + Style.RESET_ALL)
     
-    other_creds = credentials['others']
     for ip in scopes['others']:
         stats["others"]["total"] += 1
+        time.sleep(0.5)  # Brief pause between attempts
         validated = False
         
-        # Try SSH first
-        if 'username' in other_creds and 'password' in other_creds:
-            username = other_creds['username']
-            password = other_creds['password']
-            
-            # Try SSH
-            print(f"  {Fore.BLUE}[*]{Style.RESET_ALL} Trying SSH for {ip}...")
-            ssh_success, ssh_message = validate_ssh(ip, username, password)
+        # Try SSH with Linux credentials first
+        linux_creds = credentials['linux']
+        if linux_creds and ('username' in linux_creds):
+            print(f"  {Fore.BLUE}[*]{Style.RESET_ALL} Trying SSH with Linux credentials for {ip}...")
+            ssh_success, ssh_message = validate_system("linux", ip, linux_creds, preferences, ssh_keys)
             
             if ssh_success:
                 stats["others"]["successful"] += 1
@@ -310,12 +485,13 @@ def main():
                 results_table["others"].append([ip, "SSH", "✓", ssh_message])
             else:
                 print(Fore.RED + f"  [✗] {ip}: SSH validation failed - {ssh_message}" + Style.RESET_ALL)
-                log_result("Others", ip, "SSH", "Failed", ssh_message)
-                
-                # Try SMB if SSH failed
-                print(f"  {Fore.BLUE}[*]{Style.RESET_ALL} Trying SMB for {ip}...")
-                domain = other_creds.get('domain', '')
-                smb_success, smb_message = validate_smb(ip, username, password, domain)
+        
+        # If SSH failed, try SMB with Windows credentials
+        if not validated:
+            windows_creds = credentials['windows']
+            if windows_creds and ('username' in windows_creds):
+                print(f"  {Fore.BLUE}[*]{Style.RESET_ALL} Trying SMB with Windows credentials for {ip}...")
+                smb_success, smb_message = validate_system("windows", ip, windows_creds, preferences)
                 
                 if smb_success:
                     stats["others"]["successful"] += 1
@@ -325,15 +501,11 @@ def main():
                     results_table["others"].append([ip, "SMB", "✓", smb_message])
                 else:
                     print(Fore.RED + f"  [✗] {ip}: SMB validation failed - {smb_message}" + Style.RESET_ALL)
-                    log_result("Others", ip, "SMB", "Failed", smb_message)
-                    results_table["others"].append([ip, "Both", "✗", "Both SSH and SMB failed"])
-        else:
-            print(Fore.YELLOW + f"  [!] {ip}: Missing credentials" + Style.RESET_ALL)
-            log_result("Others", ip, "Both", "Skipped", "Missing credentials")
-            results_table["others"].append([ip, "Both", "!", "Missing credentials"])
         
-        if not validated and 'username' in other_creds:
+        if not validated:
             stats["others"]["failed"] += 1
+            log_result("Others", ip, "Both", "Failed", "Both SSH and SMB failed")
+            results_table["others"].append([ip, "Both", "✗", "Both SSH and SMB failed"])
 
     # Print summary table for each section
     print(Fore.GREEN + "\n[+] Validation Results Summary" + Style.RESET_ALL)
