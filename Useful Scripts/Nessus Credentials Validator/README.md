@@ -42,9 +42,6 @@ pip install colorama paramiko smbprotocol ipaddress tabulate
 git clone <repository-url>
 cd nessus-credential-validator
 
-# Install required dependencies
-pip install -r requirements.txt
-
 # Make the script executable (Linux/macOS)
 chmod +x nessus_validator.py
 ```
