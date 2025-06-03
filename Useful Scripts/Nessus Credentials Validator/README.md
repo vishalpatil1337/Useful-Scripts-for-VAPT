@@ -1,4 +1,4 @@
-# Nessus Credential Validator
+# NOSXFUS - Nessus Credential Validator
 
 ```
   _  _  ___  ___  __  __ ___ _   _ ___ 
