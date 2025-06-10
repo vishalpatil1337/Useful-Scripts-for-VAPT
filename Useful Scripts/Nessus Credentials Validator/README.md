@@ -132,7 +132,7 @@ Others:
 ### Basic Usage
 
 ```bash
-python3 nessus_validator.py
+python3 nessus-credential_validator.py
 ```
 
 ### Interactive Configuration
